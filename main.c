@@ -28,6 +28,7 @@ void print_help() {
     puts("  vacuum - remove duplicated files in upperdir where copy_up is done but the file is not actually modified");
     puts("  diff   - show the list of actually changed files");
     puts("  merge  - merge all changes from upperdir to lowerdir, and clear upperdir");
+    puts("  reconnect - verify origin fh from upperdir matches lowerdir, set redirect or opaque on mismatch");
     puts("");
     puts("Options:");
     puts("  -l, --lowerdir=LOWERDIR    the lowerdir of OverlayFS (required)");
@@ -184,6 +185,8 @@ int main(int argc, char *argv[]) {
             script = create_shell_script(filename_template);
             if (script == NULL) { fprintf(stderr, "Script file cannot be created.\n"); return EXIT_FAILURE; }
             out = merge(lower, upper, verbose, script);
+        } else if (strcmp(argv[optind], "reconnect") == 0) {
+            out = reconnect(lower, upper, verbose);
         } else {
             fprintf(stderr, "Action not supported.\n");
             goto see_help;

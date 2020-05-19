@@ -47,6 +47,10 @@ int is_opaque(const char *path, bool *output) {
     return 0;
 }
 
+int set_opaque(const char *path) {
+    return setxattr(path, ovl_opaque_xattr, "y", 1, 0);
+}
+
 int is_metacopy(const char *path, bool *output) {
     ssize_t res = getxattr(path, ovl_metacopy_xattr, NULL, 0);
     if ((res < 0) && (errno != ENODATA)) {
@@ -65,6 +69,10 @@ int is_redirect(const char *path, bool *output) {
     }
     *output = (res > 0);
     return 0;
+}
+
+int set_redirect(const char *path, const char *redirect) {
+    return setxattr(path, ovl_redirect_xattr, redirect, strlen(redirect), 0);
 }
 
 // Treat redirect as opaque dir because it hides the tree in lower_path
@@ -395,6 +403,27 @@ int merge_whiteout(const char *lower_path, const char* upper_path, const size_t 
     return command(script_stream, "rm -r %", lower_path) || command(script_stream, "rm %", upper_path);
 }
 
+int reconnect_d(const char *lower_path, const char* upper_path, const size_t lower_root_len, const struct stat *lower_status, const struct stat *upper_status, bool verbose, FILE* script_stream, int *fts_instr) {
+    bool opaque;
+    if (is_opaquedir(upper_path, &opaque) < 0) { return -1; }
+    if (opaque) { return 0; }
+    if (lower_status != NULL && file_type(lower_status) == S_IFDIR) {
+        {
+            // origin match lower - set redirect to lower
+            if (set_redirect(upper_path, lower_path) < 0) { return -1; }
+            return 0;
+        }
+        {
+            // origin found - set redirect to decoded lower
+            if (set_redirect(upper_path, lower_path) < 0) { return -1; }
+            return 0;
+        }
+    }
+    // origin mismatch - set opaque
+    if (set_opaque(upper_path) < 0) { return -1; }
+    return 0;
+}
+
 typedef int (*TRAVERSE_CALLBACK)(const char *lower_path, const char* upper_path, const size_t lower_root_len, const struct stat *lower_status, const struct stat *upper_status, bool verbose, FILE* script_stream, int *fts_instr);
 
 int traverse(const char *lower_root, const char *upper_root, bool verbose, FILE* script_stream, TRAVERSE_CALLBACK callback_d, TRAVERSE_CALLBACK callback_dp, TRAVERSE_CALLBACK callback_f, TRAVERSE_CALLBACK callback_sl, TRAVERSE_CALLBACK callback_whiteout) { // returns 0 on success
@@ -468,4 +497,8 @@ int diff(const char* lowerdir, const char* upperdir, bool is_verbose) {
 
 int merge(const char* lowerdir, const char* upperdir, bool is_verbose, FILE* script_stream) {
     return traverse(lowerdir, upperdir, is_verbose, script_stream, merge_d, merge_dp, merge_f, merge_sl, merge_whiteout);
+}
+
+int reconnect(const char* lowerdir, const char* upperdir, bool is_verbose) {
+    return traverse(lowerdir, upperdir, is_verbose, NULL, reconnect_d, NULL, NULL, NULL, NULL);
 }

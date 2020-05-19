@@ -24,4 +24,5 @@ int diff(const char* lowerdir, const char* upperdir, bool is_verbose);
  */
 int merge(const char* lowerdir, const char* upperdir, bool is_verbose, FILE* script_stream);
 
+int reconnect(const char* lowerdir, const char* upperdir, bool is_verbose);
 #endif //OVERLAYFS_TOOLS_LOGIC_H
