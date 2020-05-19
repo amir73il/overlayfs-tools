@@ -13,8 +13,13 @@
 #include "logic.h"
 #include "sh.h"
 
-#define WHITEOUT_DEV 0 // exactly the same as in linux/fs.h
-const char *ovl_opaque_xattr = "trusted.overlay.opaque"; // exact the same as in fs/overlayfs/super.c
+// exactly the same as in linux/fs.h
+#define WHITEOUT_DEV 0
+
+// exact the same as in fs/overlayfs/overlayfs.h
+const char *ovl_opaque_xattr = "trusted.overlay.opaque";
+const char *ovl_metacopy_xattr = "trusted.overlay.metacopy";
+const char *ovl_redirect_xattr = "trusted.overlay.redirect";
 
 #define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
 
@@ -39,6 +44,26 @@ int is_opaquedir(const char *path, bool *output) {
         return -1;
     }
     *output = (res == 1 && val == 'y');
+    return 0;
+}
+
+int is_metacopy(const char *path, bool *output) {
+    ssize_t res = getxattr(path, ovl_metacopy_xattr, NULL, 0);
+    if ((res < 0) && (errno != ENODATA)) {
+        fprintf(stderr, "File %s metacopy xattr can not be read.\n", path);
+        return -1;
+    }
+    *output = (res >= 0);
+    return 0;
+}
+
+int is_redirect(const char *path, bool *output) {
+    ssize_t res = getxattr(path, ovl_redirect_xattr, NULL, 0);
+    if ((res < 0) && (errno != ENODATA)) {
+        fprintf(stderr, "File %s redirect xattr can not be read.\n", path);
+        return -1;
+    }
+    *output = (res > 0);
     return 0;
 }
 
@@ -67,6 +92,14 @@ int regular_file_identical(const char *lower_path, const struct stat *lower_stat
     if (lower_status->st_size != upper_status->st_size) { // different sizes
         *output = false;
         return 0;
+    }
+    bool metacopy, redirect;
+    if (is_metacopy(upper_path, &metacopy) < 0) { return -1; }
+    if (is_redirect(upper_path, &redirect) < 0) { return -1; }
+    if (metacopy) {
+	    // metacopy means data is indentical, but redirect means it is not identical to lower_path
+	    *output = !redirect;
+	    return 0;
     }
     char lower_buffer[blksize];
     char upper_buffer[blksize];
